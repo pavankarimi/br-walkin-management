@@ -2,17 +2,37 @@ import os, smtplib, requests
 from email.message import EmailMessage
 
 def send_student_email(student, subject, message):
-    host, user = os.getenv("SMTP_HOST"), os.getenv("SMTP_USER")
-    if not host or not user or not os.getenv("SMTP_PASSWORD"):
+    host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    user = os.getenv("SMTP_USER")
+    password = os.getenv("SMTP_PASSWORD")
+
+    if not host or not user or not password:
         return "Not configured"
+
+    port = int(os.getenv("SMTP_PORT", "587"))
+
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = os.getenv("SMTP_FROM", user)
     msg["To"] = student.email
-    msg.set_content(f"Hello {student.full_name},\n\n{message}\n\nLogin to your BR Concepts Student Career Portal to view all updates.\n\nBR Concepts")
-    with smtplib.SMTP(host, int(os.getenv("SMTP_PORT", "587")), timeout=20) as server:
-        server.starttls(); server.login(user, os.getenv("SMTP_PASSWORD")); server.send_message(msg)
-    return "Sent"
+    msg.set_content(
+        f"Hello {student.full_name},\n\n{message}\n\n"
+        "Login to your BR Concepts Student Career Portal to view all updates.\n\nBR Concepts"
+    )
+
+    try:
+        if port == 465:
+            with smtplib.SMTP_SSL(host, port, timeout=20) as server:
+                server.login(user, password)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(host, port, timeout=20) as server:
+                server.starttls()
+                server.login(user, password)
+                server.send_message(msg)
+        return "Sent"
+    except Exception as e:
+        return f"Failed – {str(e)}"
 
 def send_student_whatsapp(student, title, message):
     token, phone_id = os.getenv("WA_ACCESS_TOKEN"), os.getenv("WA_PHONE_NUMBER_ID")
