@@ -738,65 +738,71 @@ def provision_student_account(student_id):
 @app.route("/student/<int:student_id>/interview", methods=["POST"])
 @staff_required
 def schedule_interview(student_id):
-  student = db.get_or_404(Student, student_id)
-  if (
-      session["role"] == "staff"
-      and student.reference_staff_id != session["staff_id"]
-  ):
-    abort(403)
-  try:
-    scheduled_at = datetime.fromisoformat(request.form.get("scheduled_at", ""))
-  except ValueError:
-    flash("Enter a valid interview date and time.", "danger")
+    student = db.get_or_404(Student, student_id)
+    if (
+        session["role"] == "staff"
+        and student.reference_staff_id != session["staff_id"]
+    ):
+        abort(403)
+    try:
+        scheduled_at = datetime.fromisoformat(request.form.get("scheduled_at", ""))
+    except ValueError:
+        flash("Enter a valid interview date and time.", "danger")
+        return redirect(url_for("student_detail", student_id=student.id))
+    
+    round_name = request.form.get("round_name", "").strip()
+    if not round_name:
+        flash("Interview round is required.", "danger")
+        return redirect(url_for("student_detail", student_id=student.id))
+        
+    interview = Interview(
+        student_id=student.id,
+        round_name=round_name,
+        scheduled_at=scheduled_at,
+        mode=request.form.get("mode", "Online"),
+        venue_or_link=request.form.get("venue_or_link", "").strip(),
+        instructions=request.form.get("instructions", "").strip(),
+        created_by=current_actor(),
+    )
+    db.session.add(interview)
+    student.status = "Interview Scheduled"
+    
+    public_note = (
+        f"{round_name} scheduled for "
+        f"{scheduled_at.strftime('%d %b %Y, %I:%M %p')} ({interview.mode})."
+    )
+    db.session.add(
+        ApplicationHistory(
+            student_id=student.id,
+            status=student.status,
+            public_note=public_note,
+            actor=current_actor(),
+        )
+    )
+    db.session.commit()
+    
+    # Clean, reliable single-block message format for email delivery
+    venue_text = interview.venue_or_link or 'Will be shared by BR Concepts'
+    instructions_text = interview.instructions or 'Please be available on time.'
+    message = (
+        f"Your {round_name} interview has been scheduled for "
+        f"{scheduled_at.strftime('%d %b %Y, %I:%M %p')} via {interview.mode}.\n\n"
+        f"Venue / Meeting Link: {venue_text}\n"
+        f"Instructions: {instructions_text}"
+    )
+    
+    results = publish_update(student, "Interview scheduled", message, "Interview")
+    log_action(
+        current_actor(),
+        "Scheduled interview",
+        f"{student.registration_id}: {round_name}",
+    )
+    flash(
+        "Interview published to the student portal. Email/WhatsApp: "
+        + str(results),
+        "success",
+    )
     return redirect(url_for("student_detail", student_id=student.id))
-  round_name = request.form.get("round_name", "").strip()
-  if not round_name:
-    flash("Interview round is required.", "danger")
-    return redirect(url_for("student_detail", student_id=student.id))
-  interview = Interview(
-      student_id=student.id,
-      round_name=round_name,
-      scheduled_at=scheduled_at,
-      mode=request.form.get("mode", "Online"),
-      venue_or_link=request.form.get("venue_or_link", "").strip(),
-      instructions=request.form.get("instructions", "").strip(),
-      created_by=current_actor(),
-  )
-  db.session.add(interview)
-  student.status = "Interview Scheduled"
-  public_note = (
-      f"{round_name} scheduled for"
-      f" {scheduled_at.strftime('%d %b %Y, %I:%M %p')} ({interview.mode})."
-  )
-  db.session.add(
-      ApplicationHistory(
-          student_id=student.id,
-          status=student.status,
-          public_note=public_note,
-          actor=current_actor(),
-      )
-  )
-  db.session.commit()
-  message = (
-      f"Interview: {round_name}\nDate & time:"
-      f" {scheduled_at.strftime('%d %b %Y, %I:%M %p')}\nMode:"
-      f" {interview.mode}\nVenue / meeting link:"
-      f" {interview.venue_or_link or 'Will be shared by BR Concepts'}\nInstructions:"
-      f" {interview.instructions or 'Please be available on time.'}"
-  )
-  results = publish_update(student, "Interview scheduled", message, "Interview")
-  log_action(
-      current_actor(),
-      "Scheduled interview",
-      f"{student.registration_id}: {round_name}",
-  )
-  flash(
-      "Interview published to the student portal. Email/WhatsApp: "
-      + str(results),
-      "success",
-  )
-  return redirect(url_for("student_detail", student_id=student.id))
-
 
 @app.route(
     "/student/<int:student_id>/interview/<int:interview_id>/cancel",
