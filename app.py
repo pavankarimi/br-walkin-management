@@ -405,10 +405,10 @@ def login():
     email = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "")
     admin_hash = generate_password_hash(
-        os.getenv("ADMIN_PASSWORD", "ChangeMe123!")
+        os.getenv("ADMIN_PASSWORD", "Bharath@1924")
     )
     if email == os.getenv(
-        "ADMIN_EMAIL", "admin@brconcepts.in"
+        "ADMIN_EMAIL", "brconcepts@gmail.com"
     ).lower() and check_password_hash(admin_hash, password):
       session.clear()
       session.update(role="admin", user_name="BR Concepts Admin")
